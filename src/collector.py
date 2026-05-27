@@ -2,10 +2,12 @@
 
 import requests
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv # type: ignore # type: 
 import datetime
 import json
 import time
+from pathlib import Path
+import pandas as pd
 
 load_dotenv()
 
@@ -69,3 +71,29 @@ def get_matches(player, qtde_matches, time_class="bullet"):
                     
     print(f"\nBusca finalizada. Encontradas: {len(collected_matches)}.")
     return collected_matches
+
+# %%
+
+def json_to_parquet(json_path, parquet_path, cols_to_drop=None):
+    """
+    Lê um arquivo JSON genérico, remove colunas indesejadas e salva em Parquet.
+    """
+    if cols_to_drop is None:
+        cols_to_drop = []
+
+    # Carrega o arquivo JSON
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    df = pd.DataFrame(data)
+
+    if df.empty:
+        return False
+
+    # Remove as colunas especificadas (ignora se a coluna não existir)
+    df = df.drop(columns=cols_to_drop, errors='ignore')
+
+    df.to_parquet(parquet_path, index=False)
+    
+    return True
+# %%
