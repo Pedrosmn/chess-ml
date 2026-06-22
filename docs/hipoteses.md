@@ -6,6 +6,6 @@ poder explicativo conforme o tempo diminui.
 
 Variável dependente: resultado da partida (vitória brancas / pretas)
 
-Variável independente principal: time_class (bullet vs rapid)
+Variável independente principal: time_class
 
 Como vou medir previsibilidade: a definir após EDA.
