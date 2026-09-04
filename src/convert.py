@@ -1,53 +1,38 @@
-# %%
-
 import pandas as pd
 import json
 import re
+from pathlib import Path
+import argparse
 
-"""criar colunas a partir do "pgn":
-    Event
-    Date
-    Round
-    White
-    Black
-    Result
-    CurrentPosition
-    ECO
-    ECOUrl
-    WhiteElo
-    BlackElo
-    Termination
-    StartTime
-
-A partir do "accuracies:
-    WhiteAcc
-    BlackAcc
-    Remover accuracies
-
-A partir do "white":
-"WhiteResult",
-"WhiteUsername",
-"WhiteUuid",
-
-A partir do "black":
-"BlackResult",
-"BlackUsername",
-"BlackUuid",
-    """
-
-# %%
-df = pd.read_parquet("../data/processed/rapid/1stSecond_2026-05-26_16-30-35.parquet")
-df.head()
-
-# %%
-
-# PGN
-# FAZER FUNÇÃO PARA GENERALIZAR PARA AS OUTRAS COLUNAS
-df_test = df.copy()
-df_test
-
-pd.set_option("display.max_columns", None)
-
+COLUMNS_PGN = {
+    "Event":"event", 
+    "Date":"date", 
+    "Round":"round", 
+    "Result":"result", 
+    "CurrentPosition":"current_position", 
+    "ECO":"eco", 
+    "ECOUrl":"ecu_url", 
+    "WhiteElo":"white_elo", 
+    "BlackElo":"black_elo", 
+    "Termination":"termination", 
+    "StartTime":"start_time",
+    }
+COLUMNS_ACCURACIES = {
+    "white":"white_acc", 
+    "black":"black_acc"
+    }
+COLUMNS_WHITE = {
+    "result":"white_result", 
+    "username":"white_username", 
+    "uuid":"white_uuid",
+    }
+COLUMNS_BLACK = {
+    "result":"black_result", 
+    "username":"black_username", 
+    "uuid":"black_uuid",
+    }
+GAME_MODES = ["bullet", "blitz", "rapid"]
+REMOVE_COLUMNS = ["pgn", "accuracies", "white", "black"]
 
 def search_pgn(cat, text):
     match = re.search(rf'\[{cat} "([^"]+)"\]', text)
@@ -62,99 +47,71 @@ def search_dict(data, key):
 
 def add_columns(df, column, new_columns, mode="pgn"):
     if mode == "pgn":
-        df["moves"] = df[column].apply(search_moves)
+        df["moves"] = df[column].apply(lambda text: None if pd.isna(text) else search_moves(text))
+
         for tag, new_col in new_columns.items():
-            df[new_col] = df[column].apply(lambda text: search_pgn(tag, text))
+            df[new_col] = df[column].apply(lambda text: None if pd.isna(text) else search_pgn(tag, text))
+        return df
+    
     elif mode == "dict":
         for key, new_col in new_columns.items():
-            df[new_col] = df[column].apply(lambda d: search_dict(d, key))
+            df[new_col] = df[column].apply(lambda d: None if pd.isna(d) else search_dict(d, key))
+        return df
 
 def add_all_columns(df):
-    new_columns_pgn = {
-        "Event":"event", 
-        "Date":"date", 
-        "Round":"round", 
-        "Result":"result", 
-        "CurrentPosition":"current_position", 
-        "ECO":"eco", 
-        "ECOUrl":"ecu_url", 
-        "WhiteElo":"white_elo", 
-        "BlackElo":"black_elo", 
-        "Termination":"termination", 
-        "StartTime":"start_time",
-        }
-    new_columns_accuracies = {
-        "white":"white_acc", 
-        "black":"black_acc"
-        }
-    new_columns_white = {
-        "result":"white_result", 
-        "username":"white_username", 
-        "uuid":"white_uuid",
-        }
-    new_columns_black = {
-        "result":"black_result", 
-        "username":"black_username", 
-        "uuid":"black_uuid",
-        }
-
-    add_columns(df, "pgn", new_columns_pgn, mode="pgn")
-    add_columns(df, "accuracies", new_columns_accuracies, mode="dict")
-    add_columns(df, "white", new_columns_white, mode="dict")
-    add_columns(df, "black", new_columns_black, mode="dict")
-    
+    add_columns(df, "pgn", COLUMNS_PGN, mode="pgn")
+    add_columns(df, "accuracies", COLUMNS_ACCURACIES, mode="dict")
+    add_columns(df, "white", COLUMNS_WHITE, mode="dict")
+    add_columns(df, "black", COLUMNS_BLACK, mode="dict")
     return df
 
 def remove_columns(df):
-    columns = ["pgn", "accuracies", "white", "black"]
+    columns = REMOVE_COLUMNS
     df = df.drop(columns=columns)
     return df
 
-def json_to_parquet(json_path, parquet_path):
+def load_json(json_path):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     df = pd.DataFrame(data)
     if df.empty:
-        print(f"Aviso: dados vazios em {json_path}, parquet não gerado.")
-        return False
+        return None
+    return df
 
-    df.to_parquet(parquet_path, index=False)
-    print(f"Dados convertidos com sucesso em: {parquet_path}")
+def save_parquet(df, filename_prefix, output_dir="../data/raw"):
+    output_path = Path(output_dir)
+
+    filepath = output_path / f"{filename_prefix}.parquet"
+    df.to_parquet(filepath, index=False)
     return True
 
-df_test = add_all_columns(df_test)
-df_test = remove_columns(df_test)
-df_test.head()
+def df_to_parquet(df, parquet_path):
+    df.to_parquet(parquet_path, index=False)
 
-# %%
-for c in new_columns_accuracies:
-    print(new_columns_accuracies.get(c))
+def convert_dir(dir_names=None):
+    if dir_names is None:
+        dir_names = GAME_MODES
 
+    for dir_name in dir_names:
+        json_dir_path = "../data/json/" + dir_name
+        output_dir_path = "../data/raw/" + dir_name
+        directory = Path(json_dir_path)
 
-# %%
-# df_test["Date"] = search_pgn("Date", text)
-df_test.head(10)
+        for file in directory.iterdir():
+            path = file._raw_paths
+            df = load_json(path[0])
+            df = add_all_columns(df)
+            df = remove_columns(df)
+            save_parquet(df, filename_prefix=file.stem, output_dir=output_dir_path)
 
-# %%
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--game-modes", nargs="+", choices=["bullet", "blitz", "rapid"], default=["bullet", "blitz", "rapid"])
 
-print((df_test.loc[1, "pgn"]))
+    args = parser.parse_args()
 
-# %%
+    convert_dir(dir_names=args.game_modes)
 
-"WhiteAcc",
-"BlackAcc"
-
-"WhiteResult",
-"WhiteUsername",
-"WhiteUuid",
-
-"BlackResult",
-"BlackUsername",
-"BlackUuid",
-
-
-
-# %%
-
-def add_columns(df):
+if __name__ == "__main__":
+    main()

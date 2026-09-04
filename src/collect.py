@@ -49,7 +49,7 @@ class ChessComCollector:
         return collected_matches
 
     @staticmethod
-    def save_data(data, filename_prefix, output_dir="../data/raw"):
+    def save_json(data, filename_prefix, output_dir="../data/json"):
         now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         output_path = Path(output_dir)
 
@@ -59,7 +59,7 @@ class ChessComCollector:
         return filepath 
 
 def get_leaderboard_games(leaderboard_players,
-                            qtde_matches=250,
+                            qtde_matches=200,
                             headers=None,
                             time_classes=("bullet", "rapid", "blitz")):
     headers = def_headers(headers)
@@ -79,7 +79,7 @@ def get_leaderboard_games(leaderboard_players,
             partidas = collector.get_matches(archive=archive, qtde_matches=qtde_matches, time_class=time_class)
 
             if partidas:
-                collector.save_data(partidas, filename_prefix=f"{time_class}/{player}")
+                collector.save_json(partidas, filename_prefix=f"{time_class}/{player}")
 
             time.sleep(1)
     
@@ -119,9 +119,9 @@ def main():
     dotenv.load_dotenv()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--top-n", default=50, type=int, help="number of top-ranked players (max=50)")
-    parser.add_argument("--time-class", nargs="+", choices=["rapid", "bullet", "blitz"], default=["rapid", "bullet", "blitz"])
-    parser.add_argument("--qtde-matches", default=250, type=int)
+    parser.add_argument("--top-n", default=50, type=int, help="number of top-ranked players (max=50) (default=50)")
+    parser.add_argument("--time-class", nargs="+", choices=["bullet", "blitz", "rapid"], default=["bullet", "blitz", "rapid"])
+    parser.add_argument("--qtde-matches", default=200, type=int)
 
     args = parser.parse_args()
 
