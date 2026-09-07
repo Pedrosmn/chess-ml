@@ -11,3 +11,6 @@
 
 # target
 - Predição de Zebras entre os melhores jogadores do site
+
+---
+enviar os dados para o db sqlite
