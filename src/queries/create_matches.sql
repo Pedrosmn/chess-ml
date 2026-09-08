@@ -1,5 +1,3 @@
-DROP TABLE IF EXISTS matches;
-
 CREATE TABLE IF NOT EXISTS matches (
     uuid TEXT PRIMARY KEY,
     url TEXT,
