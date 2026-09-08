@@ -119,9 +119,9 @@ def main():
     dotenv.load_dotenv()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--top-n", default=50, type=int, help="number of top-ranked players (max=50) (default=50)")
-    parser.add_argument("--time-class", nargs="+", choices=["bullet", "blitz", "rapid"], default=["bullet", "blitz", "rapid"])
-    parser.add_argument("--qtde-matches", default=200, type=int)
+    parser.add_argument("--top_n", default=50, type=int, help="number of top-ranked players (max=50) (default=50)")
+    parser.add_argument("--time_class", nargs="+", choices=["bullet", "blitz", "rapid"], default=["bullet", "blitz", "rapid"])
+    parser.add_argument("--qtde_matches", default=200, type=int)
 
     args = parser.parse_args()
 

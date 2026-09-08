@@ -94,20 +94,19 @@ def convert_dir(dir_names=None):
         dir_names = GAME_MODES
 
     for dir_name in dir_names:
-        json_dir_path = "../data/json/" + dir_name
-        output_dir_path = "../data/raw/" + dir_name
+        json_dir_path = Path("../data/json") / dir_name
+        output_dir_path = Path("../data/raw") / dir_name
         directory = Path(json_dir_path)
 
         for file in directory.iterdir():
-            path = file._raw_paths
-            df = load_json(path[0])
+            df = load_json(file)
             df = add_all_columns(df)
             df = remove_columns(df)
             save_parquet(df, filename_prefix=file.stem, output_dir=output_dir_path)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--game-modes", nargs="+", choices=["bullet", "blitz", "rapid"], default=["bullet", "blitz", "rapid"])
+    parser.add_argument("--game_modes", nargs="+", choices=["bullet", "blitz", "rapid"], default=["bullet", "blitz", "rapid"])
 
     args = parser.parse_args()
 
