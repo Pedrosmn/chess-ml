@@ -5,7 +5,6 @@ import datetime
 import json
 import time
 from pathlib import Path
-import pandas as pd
 import argparse
 
 dotenv.load_dotenv()
