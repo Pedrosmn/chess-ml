@@ -5,3 +5,4 @@ __pycache__
 *.parquet
 *.db
 docs/
+notebooks/
