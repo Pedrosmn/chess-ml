@@ -6,22 +6,43 @@ import sqlalchemy
 import io
 
 con = sqlalchemy.create_engine("sqlite:///../data/db/database.db")
-# %%
 
+pieces = chess.PIECE_TYPES
+white = chess.WHITE
+black = chess.BLACK
+# %%
 df_base = pd.read_sql("matches", con)
 df_base
 
 # %%
-df = pd.DataFrame(columns=["uuid", "white_move", "black_move"])
-df["uuid"] = df_base["uuid"]
-df
+def qtde_pieces(piece):
+    piece_name = chess.piece_name(piece)
+    turn = board.turn
+
+    match[board.ply()][f"qtde_{piece_name}"] = len(board.pieces(piece, turn))
+
+def diff_piece(piece):
+    piece_name = chess.piece_name(piece)
+    turn = board.turn
+    opponent = not board.turn
+
+    qtde_pieces = len(board.pieces(piece, turn))
+    qtde_pieces_opponent = len(board.pieces(piece, opponent))
+
+    match[board.ply()][f"diff_{piece_name}"] = qtde_pieces - qtde_pieces_opponent
+
+def has_castled():
+    if board.ply() >= 2:
+        castled = match[board.ply() - 2]["has_castled"]
+    else:
+        castled = False
+
+    match[board.ply()]["has_castled"] = castled or board.is_castling(move)
+
 
 # Fazer uma lista de dicionários, cada dicinoário sendo as features do lance. e no fim adicionar tudo no df
 
-
-
-
-# %%
+# Se eu apagar a coluna turn, continuo sabendo exatamente o que esse número representa?
 
 pgn = df_base.iloc[6]["moves"]
 pgn = io.StringIO(pgn)
@@ -35,14 +56,26 @@ for move in game.mainline_moves():
     move_dict = {}
     match.append(move_dict)
     piece = board.piece_at(move.from_square)
+    turn = board.turn
 
     match[board.ply()]["move"] = move
-    if board.turn == chess.WHITE:
+
+    # features about de player
+
+    if turn == white:
         # white's turn
         match[board.ply()]["turn"] = "white"
+
     else:
         # black's turn
         match[board.ply()]["turn"] = "black"
+
+    # features históricas
+
+    for p in pieces[:-1]:
+        qtde_pieces(p)
+        diff_piece(p)
+    has_castled()
 
     # features about the move
 
