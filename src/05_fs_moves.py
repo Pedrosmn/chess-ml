@@ -16,31 +16,12 @@ df_base
 
 # %%
 
-class FSMoves:
+class FsMoves:
 
     def __init__(self, board, match, match_qtde=None):
         self.board = board
         self.match = match
         self.match_qtde = match_qtde
-        
-    def qtde_pieces(self, piece):
-        piece_name = chess.piece_name(piece)
-        turn = self.board.turn
-        print(len(
-            self.board.pieces(piece, turn)))
-
-        self.match[self.board.ply()][f"qtde_{piece_name}"] = len(
-            self.board.pieces(piece, turn))
-
-    def diff_piece(self, piece):
-        piece_name = chess.piece_name(piece)
-        turn = self.board.turn
-        opponent = not self.board.turn
-
-        qtde_pieces = len(self.board.pieces(piece, turn))
-        qtde_pieces_opponent = len(self.board.pieces(piece, opponent))
-
-        self.match[self.board.ply()][f"diff_{piece_name}"] = qtde_pieces - qtde_pieces_opponent
 
     def has_castled(self, move):
         if self.board.ply() >= 2:
@@ -60,7 +41,7 @@ class FSMoves:
 
     def has_queen_castled(self, move):
         if self.board.ply() >= 2:
-            castled = self.match[self.board.ply() - 2]["has_queen_castled"]
+            castled = self.match[self.board.ply() - 1]["has_queen_castled"]
         else:
             castled = False
 
@@ -81,15 +62,6 @@ class FSMoves:
     def gives_check(self, move):
         self.match[self.board.ply()]["gives_check"] = self.board.gives_check(move)
 
-    def qtde_gives_check(self):
-        if self.board.ply() <= 1:
-            self.match_qtde[self.board.ply()]["qtde_gives_check"] = 0
-        else:
-            append = self.match_qtde[self.board.ply()-2]["qtde_gives_check"]
-            now = self.match[self.board.ply()]["gives_check"]
-            self.match_qtde[self.board.ply()]["qtde_gives_check"] = append + now
-            
-
     def is_2_repetition(self):
         self.match[self.board.ply()]["is_2_repetition"] = self.board.is_repetition(count=2)
 
@@ -107,6 +79,66 @@ class FSMoves:
         else:
             self.match[self.board.ply()]["is_trade"] = False
 
+class FsQtde:
+
+    def __init__(self, board, match, match_qtde=None):
+        self.board = board
+        self.match = match
+        self.match_qtde = match_qtde
+
+    def qtde_pieces(self, piece):
+        piece_name = chess.piece_name(piece)
+        turn = self.board.turn
+        print(len(
+            self.board.pieces(piece, turn)))
+
+        self.match_qtde[self.board.ply()][f"qtde_{piece_name}"] = len(
+            self.board.pieces(piece, turn))
+
+    def diff_piece(self, piece):
+        piece_name = chess.piece_name(piece)
+        turn = self.board.turn
+        opponent = not self.board.turn
+
+        qtde_pieces = len(self.board.pieces(piece, turn))
+        qtde_pieces_opponent = len(self.board.pieces(piece, opponent))
+
+        self.match_qtde[self.board.ply()][f"diff_{piece_name}"] = qtde_pieces - qtde_pieces_opponent
+
+    def qtde_move(self, qtde_column, origin_column):
+        if self.board.ply() <= 1:
+            self.match_qtde[self.board.ply()][f"{qtde_column}"] = int(self.match[self.board.ply()][f"{origin_column}"])
+        else:
+            past_move = self.match_qtde[self.board.ply()-2][f"{qtde_column}"]
+            move_now = self.match[self.board.ply()][f"{origin_column}"]
+            self.match_qtde[self.board.ply()][f"{qtde_column}"] = past_move + move_now
+
+class FsOpp:
+
+    def __init__(self, board, match, match_qtde=None, match_opp=None):
+        self.board = board
+        self.match = match
+        self.match_qtde = match_qtde
+        self.match_opp = match_opp
+
+    def opp_move(self, opp_column, origin_column):
+        if self.board.ply() >= 2:
+            toggle = self.match[self.board.ply() - 1][f"{origin_column}"]
+        else: 
+            toggle = False
+
+        if self.match_qtde:
+            self.match_qtde[self.board.ply()][f"{opp_column}"] = toggle 
+        else:
+            self.match[self.board.ply()][f"{opp_column}"] = toggle 
+
+    def qtde_opp_move(self, qtde_column, origin_column):
+        if self.board.ply() < 1:
+            self.match_opp[self.board.ply()][f"{qtde_column}"] = 0
+        else:
+            past_move = self.match_qtde[self.board.ply()-1][f"{origin_column}"]
+            self.match_opp[self.board.ply()][f"{qtde_column}"] = past_move
+
 
 def feature_store(pgn_str):
 
@@ -115,7 +147,7 @@ def feature_store(pgn_str):
     board = game.board()
 
     match = []
-    fs_moves = FSMoves(board, match)
+    fs_moves = FsMoves(board, match)
 
     for move in game.mainline_moves():
         move_dict = {}
@@ -136,15 +168,13 @@ def feature_store(pgn_str):
         else:
             match[board.ply()]["turn"] = "black"
 
-        # # features about the move
-        # fs_moves.is_capture(move)
+        # # features about the move turn
+        fs_moves.is_capture(move)
         # fs_moves.is_trade(move)
         # fs_moves.move_piece(piece)
-        # fs_moves.is_irreversible(move)
+        fs_moves.is_irreversible(move)
+        # fs_moves.gives_check(move)
         # fs_moves.is_in_check()
-        fs_moves.gives_check(move)
-        
-        # fs_moves.qtde_gives_check(max_moves)
         # fs_moves.is_2_repetition()
         # fs_moves.has_2_repetition()
 
@@ -156,6 +186,12 @@ def feature_store(pgn_str):
         # fs_moves.has_king_castled(move)
         # fs_moves.has_queen_castled(move)
 
+        # features about the opponent
+        # fs_moves.opp_has_2_repetition()
+        # fs_moves.opp_has_castled(move)
+        # fs_moves.opp_has_king_castled(move)
+        # fs_moves.opp_has_queen_castled(move)
+
         board.push(move)
 
     return match
@@ -165,15 +201,14 @@ pgn_str = df_base.iloc[2]["moves"]
 features = feature_store(pgn_str)
 teste = pd.DataFrame(features)
 
-def feature_store_qtde(pgn_str, features):
+def feature_store_qtde(pgn_str, match):
 
     pgn = io.StringIO(pgn_str)
     game = chess.pgn.read_game(pgn)
     board = game.board()
 
-    match = features
     match_qtde = []
-    fs_moves = FSMoves(board, match, match_qtde)
+    fs_qtde = FsQtde(board, match, match_qtde)
 
     for move in game.mainline_moves():
         move_dict = {}
@@ -182,16 +217,56 @@ def feature_store_qtde(pgn_str, features):
         piece = board.piece_at(move.from_square)
         turn = board.turn
 
-        fs_moves.qtde_gives_check()
+        # for p in pieces[:-1]:
+        #     fs_qtde.qtde_pieces(p)
+        #     fs_qtde.diff_piece(p)
+
+        # fs_qtde.qtde_move("qtde_gives_check", "gives_check")
+        # fs_qtde.qtde_move("qtde_is_in_check", "is_in_check")
+        fs_qtde.qtde_move("qtde_capture", "is_capture")
+        # fs_qtde.qtde_move("qtde_irreversible", "is_irreversible")
+
+
 
         board.push(move)
-        
+
     return match_qtde
 
+def feature_store_opp(pgn_str, match, match_qtde):
+
+    pgn = io.StringIO(pgn_str)
+    game = chess.pgn.read_game(pgn)
+    board = game.board()
+
+    match_opp = []
+    fs_opp = FsOpp(board, match, match_qtde=match_qtde, match_opp=match_opp)
+    fs_opp_qtde = FsOpp(board, match, match_qtde=match_qtde, match_opp=match_opp)
+
+    for move in game.mainline_moves():
+        move_dict = {}
+        match_opp.append(move_dict)
+        max_moves = game.end().ply()
+        piece = board.piece_at(move.from_square)
+        turn = board.turn
+
+        # fs_opp.opp_move("opp_has_2_repetition", "has_2_repetition")
+        # fs_opp.opp_move("opp_has_castled", "has_castled")
+        # fs_opp.opp_move("opp_has_queen_castled", "has_queen_castled")
+        # fs_opp.opp_move("opp_has_king_castled", "has_king_castled")
+
+        fs_opp_qtde.qtde_opp_move("opp_qtde_capture", "qtde_capture")
+        # fs_opp_qtde.qtde_opp_move("opp_qtde_irreversible", "qtde_irreversible")
+
+        board.push(move)
+
+    return match_opp
+
 features_qtde = feature_store_qtde(pgn_str, features)
+features_opp = feature_store_opp(pgn_str, features, features_qtde)
 teste_qtde = pd.DataFrame(features_qtde)
-teste_qtde = pd.concat([teste, teste_qtde], axis=1)
-teste_qtde.tail(30)
+teste_opp = pd.DataFrame(features_opp)
+teste_qtde = pd.concat([teste, teste_qtde, teste_opp], axis=1)
+teste_qtde.head(50)
 
 # %%
 df_base.iloc[2]
