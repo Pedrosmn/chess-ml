@@ -18,9 +18,10 @@ df_base
 
 class FSMoves:
 
-    def __init__(self, board, match):
+    def __init__(self, board, match, match_qtde=None):
         self.board = board
         self.match = match
+        self.match_qtde = match_qtde
         
     def qtde_pieces(self, piece):
         piece_name = chess.piece_name(piece)
@@ -49,6 +50,22 @@ class FSMoves:
 
         self.match[self.board.ply()]["has_castled"] = castled or self.board.is_castling(move)
 
+    def has_king_castled(self, move):
+        if self.board.ply() >= 2:
+            castled = self.match[self.board.ply() - 2]["has_king_castled"]
+        else:
+            castled = False
+
+        self.match[self.board.ply()]["has_king_castled"] = castled or self.board.is_kingside_castling(move)
+
+    def has_queen_castled(self, move):
+        if self.board.ply() >= 2:
+            castled = self.match[self.board.ply() - 2]["has_queen_castled"]
+        else:
+            castled = False
+
+        self.match[self.board.ply()]["has_queen_castled"] = castled or self.board.is_queenside_castling(move)
+
     def is_capture(self, move):
         self.match[self.board.ply()]["is_capture"] = self.board.is_capture(move)
 
@@ -64,8 +81,25 @@ class FSMoves:
     def gives_check(self, move):
         self.match[self.board.ply()]["gives_check"] = self.board.gives_check(move)
 
+    def qtde_gives_check(self):
+        if self.board.ply() <= 1:
+            self.match_qtde[self.board.ply()]["qtde_gives_check"] = 0
+        else:
+            append = self.match_qtde[self.board.ply()-2]["qtde_gives_check"]
+            now = self.match[self.board.ply()]["gives_check"]
+            self.match_qtde[self.board.ply()]["qtde_gives_check"] = append + now
+            
+
     def is_2_repetition(self):
         self.match[self.board.ply()]["is_2_repetition"] = self.board.is_repetition(count=2)
+
+    def has_2_repetition(self):
+        if self.board.ply() >= 2:
+            repeated = self.match[self.board.ply() - 2]["has_2_repetition"]
+        else:
+            repeated = False
+
+        self.match[self.board.ply()]["has_2_repetition"] = repeated or self.board.is_repetition(count=2)
 
     def is_trade(self, move):
         if self.board.is_capture(move) and (self.match[self.board.ply()-1]["is_capture"] == True):
@@ -86,9 +120,12 @@ def feature_store(pgn_str):
     for move in game.mainline_moves():
         move_dict = {}
         match.append(move_dict)
+        max_moves = game.end().ply()
         piece = board.piece_at(move.from_square)
         turn = board.turn
 
+
+        match[board.ply()]["fullmove"] = board.fullmove_number
         match[board.ply()]["move"] = move
 
         # features about de player
@@ -99,36 +136,65 @@ def feature_store(pgn_str):
         else:
             match[board.ply()]["turn"] = "black"
 
-        # features about the move
-        fs_moves.is_capture(move)
-        fs_moves.is_trade(move)
-        fs_moves.move_piece(piece)
-        fs_moves.is_irreversible(move)
-        fs_moves.is_in_check()
+        # # features about the move
+        # fs_moves.is_capture(move)
+        # fs_moves.is_trade(move)
+        # fs_moves.move_piece(piece)
+        # fs_moves.is_irreversible(move)
+        # fs_moves.is_in_check()
         fs_moves.gives_check(move)
-        fs_moves.is_2_repetition()
+        
+        # fs_moves.qtde_gives_check(max_moves)
+        # fs_moves.is_2_repetition()
+        # fs_moves.has_2_repetition()
 
-        # features históricas
-        for p in pieces[:-1]:
-            fs_moves.qtde_pieces(p)
-            fs_moves.diff_piece(p)
-        fs_moves.has_castled(move)
+        # # features históricas
+        # for p in pieces[:-1]:
+        #     fs_moves.qtde_pieces(p)
+        #     fs_moves.diff_piece(p)
+        # fs_moves.has_castled(move)
+        # fs_moves.has_king_castled(move)
+        # fs_moves.has_queen_castled(move)
 
         board.push(move)
 
     return match
 
-
-
-pgn_str = df_base.iloc[6]["moves"]
+pgn_str = df_base.iloc[2]["moves"]
 
 features = feature_store(pgn_str)
-
 teste = pd.DataFrame(features)
-teste.head(30)
+
+def feature_store_qtde(pgn_str, features):
+
+    pgn = io.StringIO(pgn_str)
+    game = chess.pgn.read_game(pgn)
+    board = game.board()
+
+    match = features
+    match_qtde = []
+    fs_moves = FSMoves(board, match, match_qtde)
+
+    for move in game.mainline_moves():
+        move_dict = {}
+        match_qtde.append(move_dict)
+        max_moves = game.end().ply()
+        piece = board.piece_at(move.from_square)
+        turn = board.turn
+
+        fs_moves.qtde_gives_check()
+
+        board.push(move)
+        
+    return match_qtde
+
+features_qtde = feature_store_qtde(pgn_str, features)
+teste_qtde = pd.DataFrame(features_qtde)
+teste_qtde = pd.concat([teste, teste_qtde], axis=1)
+teste_qtde.tail(30)
 
 # %%
-df_base.iloc[6]
+df_base.iloc[2]
 # match
 
 # %%
