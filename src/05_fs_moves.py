@@ -10,42 +10,28 @@ con = sqlalchemy.create_engine("sqlite:///../data/db/database.db")
 pieces = chess.PIECE_TYPES
 white = chess.WHITE
 black = chess.BLACK
-# %%
 df_base = pd.read_sql("matches", con)
 df_base
 
 # %%
 
-class FsMoves:
+class GameContext:
 
-    def __init__(self, board, match, match_qtde=None):
+    def __init__(self, board, ply, move, piece, match, match_qtde=None, match_opp=None):
         self.board = board
+        self.ply = ply
+        self.move = move
+        self.piece = piece
         self.match = match
         self.match_qtde = match_qtde
+        self.match_opp = match_opp
 
-    def has_castled(self, move):
-        if self.board.ply() >= 2:
-            castled = self.match[self.board.ply() - 2]["has_castled"]
-        else:
-            castled = False
+class FsMove:
 
-        self.match[self.board.ply()]["has_castled"] = castled or self.board.is_castling(move)
-
-    def has_king_castled(self, move):
-        if self.board.ply() >= 2:
-            castled = self.match[self.board.ply() - 2]["has_king_castled"]
-        else:
-            castled = False
-
-        self.match[self.board.ply()]["has_king_castled"] = castled or self.board.is_kingside_castling(move)
-
-    def has_queen_castled(self, move):
-        if self.board.ply() >= 2:
-            castled = self.match[self.board.ply() - 1]["has_queen_castled"]
-        else:
-            castled = False
-
-        self.match[self.board.ply()]["has_queen_castled"] = castled or self.board.is_queenside_castling(move)
+    def __init__(self, game_context):
+        self.board = game_context.board
+        self.match = game_context.match
+        self.match_qtde = game_context.match_qtde
 
     def is_capture(self, move):
         self.match[self.board.ply()]["is_capture"] = self.board.is_capture(move)
@@ -79,18 +65,40 @@ class FsMoves:
         else:
             self.match[self.board.ply()]["is_trade"] = False
 
+    def has_castled(self, move):
+        if self.board.ply() >= 2:
+            castled = self.match[self.board.ply() - 2]["has_castled"]
+        else:
+            castled = False
+
+        self.match[self.board.ply()]["has_castled"] = castled or self.board.is_castling(move)
+
+    def has_king_castled(self, move):
+        if self.board.ply() >= 2:
+            castled = self.match[self.board.ply() - 2]["has_king_castled"]
+        else:
+            castled = False
+
+        self.match[self.board.ply()]["has_king_castled"] = castled or self.board.is_kingside_castling(move)
+
+    def has_queen_castled(self, move):
+        if self.board.ply() >= 2:
+            castled = self.match[self.board.ply() - 2]["has_queen_castled"]
+        else:
+            castled = False
+
+        self.match[self.board.ply()]["has_queen_castled"] = castled or self.board.is_queenside_castling(move)
+
 class FsQtde:
 
-    def __init__(self, board, match, match_qtde=None):
-        self.board = board
-        self.match = match
-        self.match_qtde = match_qtde
+    def __init__(self, game_context):
+        self.board = game_context.board
+        self.match = game_context.match
+        self.match_qtde = game_context.match_qtde
 
     def qtde_pieces(self, piece):
         piece_name = chess.piece_name(piece)
         turn = self.board.turn
-        print(len(
-            self.board.pieces(piece, turn)))
 
         self.match_qtde[self.board.ply()][f"qtde_{piece_name}"] = len(
             self.board.pieces(piece, turn))
@@ -115,11 +123,11 @@ class FsQtde:
 
 class FsOpp:
 
-    def __init__(self, board, match, match_qtde=None, match_opp=None):
-        self.board = board
-        self.match = match
-        self.match_qtde = match_qtde
-        self.match_opp = match_opp
+    def __init__(self, game_context):
+        self.board = game_context.board
+        self.match = game_context.match
+        self.match_qtde = game_context.match_qtde
+        self.match_opp = game_context.match_opp
 
     def opp_move(self, opp_column, origin_column):
         if self.board.ply() >= 2:
@@ -140,141 +148,85 @@ class FsOpp:
             self.match_opp[self.board.ply()][f"{qtde_column}"] = past_move
 
 
-def feature_store(pgn_str):
-
+def pipeline_fs(pgn_str):
     pgn = io.StringIO(pgn_str)
     game = chess.pgn.read_game(pgn)
     board = game.board()
 
     match = []
-    fs_moves = FsMoves(board, match)
+    match_qtde = []
+    match_opp = []
 
     for move in game.mainline_moves():
-        move_dict = {}
-        match.append(move_dict)
-        max_moves = game.end().ply()
+        match.append({})
+        match_qtde.append({})
+        match_opp.append({})
         piece = board.piece_at(move.from_square)
         turn = board.turn
 
+        game_context = GameContext(board=board, ply=board.ply(), move=move, piece=piece, match=match, match_qtde=match_qtde, match_opp=match_opp)
+        fs_moves = FsMove(game_context)
+        fs_qtde = FsQtde(game_context)
+        fs_opp = FsOpp(game_context)
 
         match[board.ply()]["fullmove"] = board.fullmove_number
         match[board.ply()]["move"] = move
-
-        # features about de player
-
         if turn == white:
             match[board.ply()]["turn"] = "white"
 
         else:
             match[board.ply()]["turn"] = "black"
 
-        # # features about the move turn
-        fs_moves.is_capture(move)
-        # fs_moves.is_trade(move)
-        # fs_moves.move_piece(piece)
-        fs_moves.is_irreversible(move)
-        # fs_moves.gives_check(move)
-        # fs_moves.is_in_check()
-        # fs_moves.is_2_repetition()
-        # fs_moves.has_2_repetition()
+        # features about the move turn
+        fs_moves.is_capture(move=move)
+        fs_moves.move_piece(piece=piece)
+        fs_moves.is_irreversible(move=move)
+        fs_moves.is_in_check()
+        fs_moves.gives_check(move=move)
+        fs_moves.is_2_repetition()
+        fs_moves.has_2_repetition()
+        fs_moves.is_trade(move=move)
+        fs_moves.has_castled(move=move)
+        fs_moves.has_king_castled(move=move)
+        fs_moves.has_queen_castled(move=move)
 
-        # # features históricas
-        # for p in pieces[:-1]:
-        #     fs_moves.qtde_pieces(p)
-        #     fs_moves.diff_piece(p)
-        # fs_moves.has_castled(move)
-        # fs_moves.has_king_castled(move)
-        # fs_moves.has_queen_castled(move)
+        # features about the move turn Qtde
+        for p in pieces[:-1]:
+            fs_qtde.qtde_pieces(p)
+            fs_qtde.diff_piece(p)
 
-        # features about the opponent
-        # fs_moves.opp_has_2_repetition()
-        # fs_moves.opp_has_castled(move)
-        # fs_moves.opp_has_king_castled(move)
-        # fs_moves.opp_has_queen_castled(move)
+        fs_qtde.qtde_move("qtde_gives_check", "gives_check")
+        fs_qtde.qtde_move("qtde_is_in_check", "is_in_check")
+        fs_qtde.qtde_move("qtde_capture", "is_capture")
+        fs_qtde.qtde_move("qtde_irreversible", "is_irreversible")
+
+        # features about de opponent
+        fs_opp.opp_move("opp_has_2_repetition", "has_2_repetition")
+        fs_opp.opp_move("opp_has_castled", "has_castled")
+        fs_opp.opp_move("opp_has_queen_castled", "has_queen_castled")
+        fs_opp.opp_move("opp_has_king_castled", "has_king_castled")
+
+        fs_opp.qtde_opp_move("opp_qtde_capture", "qtde_capture")
+        fs_opp.qtde_opp_move("opp_qtde_irreversible", "qtde_irreversible")
 
         board.push(move)
 
-    return match
+    return match, match_qtde, match_opp
+
 
 pgn_str = df_base.iloc[2]["moves"]
+match, match_qtde, match_opp = pipeline_fs(pgn_str)
+match_df = pd.DataFrame(match)
+match_qtde_df = pd.DataFrame(match_qtde)
+match_opp_df = pd.DataFrame(match_opp)
 
-features = feature_store(pgn_str)
-teste = pd.DataFrame(features)
-
-def feature_store_qtde(pgn_str, match):
-
-    pgn = io.StringIO(pgn_str)
-    game = chess.pgn.read_game(pgn)
-    board = game.board()
-
-    match_qtde = []
-    fs_qtde = FsQtde(board, match, match_qtde)
-
-    for move in game.mainline_moves():
-        move_dict = {}
-        match_qtde.append(move_dict)
-        max_moves = game.end().ply()
-        piece = board.piece_at(move.from_square)
-        turn = board.turn
-
-        # for p in pieces[:-1]:
-        #     fs_qtde.qtde_pieces(p)
-        #     fs_qtde.diff_piece(p)
-
-        # fs_qtde.qtde_move("qtde_gives_check", "gives_check")
-        # fs_qtde.qtde_move("qtde_is_in_check", "is_in_check")
-        fs_qtde.qtde_move("qtde_capture", "is_capture")
-        # fs_qtde.qtde_move("qtde_irreversible", "is_irreversible")
-
-
-
-        board.push(move)
-
-    return match_qtde
-
-def feature_store_opp(pgn_str, match, match_qtde):
-
-    pgn = io.StringIO(pgn_str)
-    game = chess.pgn.read_game(pgn)
-    board = game.board()
-
-    match_opp = []
-    fs_opp = FsOpp(board, match, match_qtde=match_qtde, match_opp=match_opp)
-    fs_opp_qtde = FsOpp(board, match, match_qtde=match_qtde, match_opp=match_opp)
-
-    for move in game.mainline_moves():
-        move_dict = {}
-        match_opp.append(move_dict)
-        max_moves = game.end().ply()
-        piece = board.piece_at(move.from_square)
-        turn = board.turn
-
-        # fs_opp.opp_move("opp_has_2_repetition", "has_2_repetition")
-        # fs_opp.opp_move("opp_has_castled", "has_castled")
-        # fs_opp.opp_move("opp_has_queen_castled", "has_queen_castled")
-        # fs_opp.opp_move("opp_has_king_castled", "has_king_castled")
-
-        fs_opp_qtde.qtde_opp_move("opp_qtde_capture", "qtde_capture")
-        # fs_opp_qtde.qtde_opp_move("opp_qtde_irreversible", "qtde_irreversible")
-
-        board.push(move)
-
-    return match_opp
-
-features_qtde = feature_store_qtde(pgn_str, features)
-features_opp = feature_store_opp(pgn_str, features, features_qtde)
-teste_qtde = pd.DataFrame(features_qtde)
-teste_opp = pd.DataFrame(features_opp)
-teste_qtde = pd.concat([teste, teste_qtde, teste_opp], axis=1)
-teste_qtde.head(50)
-
+teste = pd.concat([match_df, match_qtde_df, match_opp_df], axis=1)
+teste.head(30)
 # %%
 df_base.iloc[2]
 # match
 
 # %%
-
-
 # print(board.halfmove_clock)
 #     número de half-moves desde a última captura ou movimento de peão
 
