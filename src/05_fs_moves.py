@@ -31,22 +31,24 @@ class FsMove:
     def __init__(self, game_context):
         self.board = game_context.board
         self.match = game_context.match
+        self.move = game_context.move
+        self.piece = game_context.piece
         self.match_qtde = game_context.match_qtde
 
-    def is_capture(self, move):
-        self.match[self.board.ply()]["is_capture"] = self.board.is_capture(move)
+    def is_capture(self):
+        self.match[self.board.ply()]["is_capture"] = self.board.is_capture(self.move)
 
-    def move_piece(self, piece):
-        self.match[self.board.ply()]["move_piece"] = chess.piece_name(piece.piece_type)
+    def move_piece(self):
+        self.match[self.board.ply()]["move_piece"] = chess.piece_name(self.piece.piece_type)
 
-    def is_irreversible(self, move):
-        self.match[self.board.ply()]["is_irreversible"] = self.board.is_irreversible(move)
+    def is_irreversible(self):
+        self.match[self.board.ply()]["is_irreversible"] = self.board.is_irreversible(self.move)
 
     def is_in_check(self):
         self.match[self.board.ply()]["is_in_check"] = self.board.is_check()
 
-    def gives_check(self, move):
-        self.match[self.board.ply()]["gives_check"] = self.board.gives_check(move)
+    def gives_check(self):
+        self.match[self.board.ply()]["gives_check"] = self.board.gives_check(self.move)
 
     def is_2_repetition(self):
         self.match[self.board.ply()]["is_2_repetition"] = self.board.is_repetition(count=2)
@@ -59,41 +61,46 @@ class FsMove:
 
         self.match[self.board.ply()]["has_2_repetition"] = repeated or self.board.is_repetition(count=2)
 
-    def is_trade(self, move):
-        if self.board.is_capture(move) and (self.match[self.board.ply()-1]["is_capture"] == True):
-            self.match[self.board.ply()]["is_trade"] = self.board.is_capture(move)
+    def is_trade(self):
+        if self.board.is_capture(self.move) and (self.match[self.board.ply()-1]["is_capture"] == True):
+            self.match[self.board.ply()]["is_trade"] = self.board.is_capture(self.move)
         else:
             self.match[self.board.ply()]["is_trade"] = False
 
-    def has_castled(self, move):
+    def has_castled(self):
         if self.board.ply() >= 2:
             castled = self.match[self.board.ply() - 2]["has_castled"]
         else:
             castled = False
 
-        self.match[self.board.ply()]["has_castled"] = castled or self.board.is_castling(move)
+        self.match[self.board.ply()]["has_castled"] = castled or self.board.is_castling(self.move)
 
-    def has_king_castled(self, move):
+    def has_king_castled(self):
         if self.board.ply() >= 2:
             castled = self.match[self.board.ply() - 2]["has_king_castled"]
         else:
             castled = False
 
-        self.match[self.board.ply()]["has_king_castled"] = castled or self.board.is_kingside_castling(move)
+        self.match[self.board.ply()]["has_king_castled"] = castled or self.board.is_kingside_castling(self.move)
 
-    def has_queen_castled(self, move):
+    def has_queen_castled(self):
         if self.board.ply() >= 2:
             castled = self.match[self.board.ply() - 2]["has_queen_castled"]
         else:
             castled = False
 
-        self.match[self.board.ply()]["has_queen_castled"] = castled or self.board.is_queenside_castling(move)
+        self.match[self.board.ply()]["has_queen_castled"] = castled or self.board.is_queenside_castling(self.move)
+
+    def is_promotion(self):
+        print(self.board.find_move(chess.square(0, 7), chess.square(0, 8)))
 
 class FsQtde:
 
     def __init__(self, game_context):
         self.board = game_context.board
         self.match = game_context.match
+        self.move = game_context.move
+        self.piece = game_context.piece
         self.match_qtde = game_context.match_qtde
 
     def qtde_pieces(self, piece):
@@ -121,11 +128,34 @@ class FsQtde:
             move_now = self.match[self.board.ply()][f"{origin_column}"]
             self.match_qtde[self.board.ply()][f"{qtde_column}"] = past_move + move_now
 
+    def recency(self, recency_column, origin_column):
+        if self.board.ply() <= 2:
+            self.match_qtde[self.board.ply()][f"{recency_column}"] = 0
+
+        if (self.match[self.board.ply()][f"{origin_column}"]) and (self.board.ply() >= 2):
+            self.match_qtde[self.board.ply()][f"{recency_column}"] = 0
+
+        elif (not self.match[self.board.ply()][f"{origin_column}"]) and (self.board.ply() >= 2):
+            self.match_qtde[self.board.ply()][f"{recency_column}"] = self.match_qtde[self.board.ply() - 2][f"{recency_column}"] + 2
+
+    def recency_pieces(self):
+
+        if self.board.ply() < 2:
+            self.match_qtde[self.board.ply()][f"ply_without_knight_move"] = 0
+
+        elif (self.match[self.board.ply()][f"move_piece"] == "knight") and (self.board.ply() >= 2):
+            self.match_qtde[self.board.ply()][f"ply_without_knight_move"] = 0
+
+        elif (self.match[self.board.ply()][f"move_piece"] != "knight") and (self.board.ply() >= 2):
+            self.match_qtde[self.board.ply()][f"ply_without_knight_move"] = self.match_qtde[self.board.ply() - 2][f"ply_without_knight_move"] + 2
+
 class FsOpp:
 
     def __init__(self, game_context):
         self.board = game_context.board
         self.match = game_context.match
+        self.move = game_context.move
+        self.piece = game_context.piece
         self.match_qtde = game_context.match_qtde
         self.match_opp = game_context.match_opp
 
@@ -135,10 +165,7 @@ class FsOpp:
         else: 
             toggle = False
 
-        if self.match_qtde:
-            self.match_qtde[self.board.ply()][f"{opp_column}"] = toggle 
-        else:
-            self.match[self.board.ply()][f"{opp_column}"] = toggle 
+        self.match_qtde[self.board.ply()][f"{opp_column}"] = toggle 
 
     def qtde_opp_move(self, qtde_column, origin_column):
         if self.board.ply() < 1:
@@ -177,37 +204,46 @@ def pipeline_fs(pgn_str):
         else:
             match[board.ply()]["turn"] = "black"
 
-        # features about the move turn
-        fs_moves.is_capture(move=move)
-        fs_moves.move_piece(piece=piece)
-        fs_moves.is_irreversible(move=move)
-        fs_moves.is_in_check()
-        fs_moves.gives_check(move=move)
-        fs_moves.is_2_repetition()
-        fs_moves.has_2_repetition()
-        fs_moves.is_trade(move=move)
-        fs_moves.has_castled(move=move)
-        fs_moves.has_king_castled(move=move)
-        fs_moves.has_queen_castled(move=move)
 
-        # features about the move turn Qtde
-        for p in pieces[:-1]:
-            fs_qtde.qtde_pieces(p)
-            fs_qtde.diff_piece(p)
+        # # features about the move turn
+        fs_moves.move_piece()
+        # fs_moves.is_capture()
+        # fs_moves.is_irreversible()
+        # fs_moves.is_in_check()
+        # fs_moves.gives_check()
+        # fs_moves.is_2_repetition()
+        # fs_moves.has_2_repetition()
+        # fs_moves.is_trade()
+        # fs_moves.has_castled()
+        # fs_moves.has_king_castled()
+        # fs_moves.has_queen_castled()
 
-        fs_qtde.qtde_move("qtde_gives_check", "gives_check")
-        fs_qtde.qtde_move("qtde_is_in_check", "is_in_check")
-        fs_qtde.qtde_move("qtde_capture", "is_capture")
-        fs_qtde.qtde_move("qtde_irreversible", "is_irreversible")
+        # # features about the move turn Qtde
+        # for p in pieces[:-1]:
+        #     fs_qtde.qtde_pieces(p)
+        #     fs_qtde.diff_piece(p)
 
-        # features about de opponent
-        fs_opp.opp_move("opp_has_2_repetition", "has_2_repetition")
-        fs_opp.opp_move("opp_has_castled", "has_castled")
-        fs_opp.opp_move("opp_has_queen_castled", "has_queen_castled")
-        fs_opp.opp_move("opp_has_king_castled", "has_king_castled")
+        # fs_qtde.qtde_move("qtde_gives_check", "gives_check")
+        # fs_qtde.qtde_move("qtde_is_in_check", "is_in_check")
+        # fs_qtde.qtde_move("qtde_capture", "is_capture")
+        # fs_qtde.qtde_move("qtde_irreversible", "is_irreversible")
 
-        fs_opp.qtde_opp_move("opp_qtde_capture", "qtde_capture")
-        fs_opp.qtde_opp_move("opp_qtde_irreversible", "qtde_irreversible")
+        # # features about recency
+        # fs_qtde.recency("ply_without_capture", "is_capture")
+        # fs_qtde.recency("ply_without_in_check", "is_in_check")
+        # fs_qtde.recency("ply_without_gives_check", "gives_check")
+        # fs_qtde.recency("ply_without_is_irreversible", "is_irreversible")
+
+        # for p in pieces[:]:
+        fs_qtde.recency_pieces()
+
+        # # features about de opponent
+        # fs_opp.opp_move("opp_has_2_repetition", "has_2_repetition")
+        # fs_opp.opp_move("opp_has_castled", "has_castled")
+        # fs_opp.opp_move("opp_has_queen_castled", "has_queen_castled")
+        # fs_opp.opp_move("opp_has_king_castled", "has_king_castled")
+        # fs_opp.qtde_opp_move("opp_qtde_capture", "qtde_capture")
+        # fs_opp.qtde_opp_move("opp_qtde_irreversible", "qtde_irreversible")
 
         board.push(move)
 
@@ -221,17 +257,7 @@ match_qtde_df = pd.DataFrame(match_qtde)
 match_opp_df = pd.DataFrame(match_opp)
 
 teste = pd.concat([match_df, match_qtde_df, match_opp_df], axis=1)
-teste.head(30)
+teste.head(20)
 # %%
 df_base.iloc[2]
 # match
-
-# %%
-# print(board.halfmove_clock)
-#     número de half-moves desde a última captura ou movimento de peão
-
-# attacks(square: chess.Square) → SquareSet
-# is_attacked_by(color: chess.Color, square: chess.Square, occupied: chess.IntoSquareSet | None = None) → bool
-# attackers(color: chess.Color, square: chess.Square, occupied: chess.IntoSquareSet | None = None) → SquareSet
-# print(board.is_pinned(True, square))
-
