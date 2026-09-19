@@ -102,23 +102,26 @@ class FsQtde:
         self.move = game_context.move
         self.piece = game_context.piece
         self.match_qtde = game_context.match_qtde
+        self.match_opp = game_context.match_opp
 
-    def qtde_pieces(self, piece):
-        piece_name = chess.piece_name(piece)
-        turn = self.board.turn
+    def qtde_pieces(self):
+        for p in pieces:
+            piece_name = chess.piece_name(p)
+            turn = self.board.turn
 
-        self.match_qtde[self.board.ply()][f"qtde_{piece_name}"] = len(
-            self.board.pieces(piece, turn))
+            self.match_qtde[self.board.ply()][f"qtde_{piece_name}"] = len(
+                self.board.pieces(p, turn))
 
-    def diff_piece(self, piece):
-        piece_name = chess.piece_name(piece)
-        turn = self.board.turn
-        opponent = not self.board.turn
+    def diff_piece(self):
+        for p in pieces:
+            piece_name = chess.piece_name(p)
+            turn = self.board.turn
+            opponent = not self.board.turn
 
-        qtde_pieces = len(self.board.pieces(piece, turn))
-        qtde_pieces_opponent = len(self.board.pieces(piece, opponent))
+            qtde_pieces = len(self.board.pieces(p, turn))
+            qtde_pieces_opponent = len(self.board.pieces(p, opponent))
 
-        self.match_qtde[self.board.ply()][f"diff_{piece_name}"] = qtde_pieces - qtde_pieces_opponent
+            self.match_qtde[self.board.ply()][f"diff_{piece_name}"] = qtde_pieces - qtde_pieces_opponent
 
     def qtde_move(self, qtde_column, origin_column):
         if self.board.ply() <= 1:
@@ -138,16 +141,19 @@ class FsQtde:
         elif (not self.match[self.board.ply()][f"{origin_column}"]) and (self.board.ply() >= 2):
             self.match_qtde[self.board.ply()][f"{recency_column}"] = self.match_qtde[self.board.ply() - 2][f"{recency_column}"] + 2
 
-    def recency_pieces(self):
+    def recency_piece(self):
 
-        if self.board.ply() < 2:
-            self.match_qtde[self.board.ply()][f"ply_without_knight_move"] = 0
+        for p in pieces:
+            piece_name = chess.piece_name(p)
+            if self.board.ply() < 2:
+                self.match_qtde[self.board.ply()][f"recency_{piece_name}_move"] = 0
 
-        elif (self.match[self.board.ply()][f"move_piece"] == "knight") and (self.board.ply() >= 2):
-            self.match_qtde[self.board.ply()][f"ply_without_knight_move"] = 0
+            elif (self.match[self.board.ply()][f"move_piece"] == f"{piece_name}") and (self.board.ply() >= 2):
+                self.match_qtde[self.board.ply()][f"recency_{piece_name}_move"] = 0
 
-        elif (self.match[self.board.ply()][f"move_piece"] != "knight") and (self.board.ply() >= 2):
-            self.match_qtde[self.board.ply()][f"ply_without_knight_move"] = self.match_qtde[self.board.ply() - 2][f"ply_without_knight_move"] + 2
+            elif (self.match[self.board.ply()][f"move_piece"] != f"{piece_name}") and (self.board.ply() >= 2):
+                self.match_qtde[self.board.ply()][f"recency_{piece_name}_move"] = self.match_qtde[self.board.ply() - 2][f"recency_{piece_name}_move"] + 2
+
 
 class FsOpp:
 
@@ -174,6 +180,31 @@ class FsOpp:
             past_move = self.match_qtde[self.board.ply()-1][f"{origin_column}"]
             self.match_opp[self.board.ply()][f"{qtde_column}"] = past_move
 
+    def opp_recency(self, recency_column, origin_column):
+            if self.board.ply() <= 1:
+                self.match_opp[self.board.ply()][recency_column] = 0
+            else:
+                past_move = self.match_qtde[self.board.ply()-1][origin_column]
+                self.match_opp[self.board.ply()][recency_column] = past_move
+
+        # if self.board.ply() <= 2:
+        #     self.match_qtde[self.board.ply()][f"{recency_column}"] = 0
+
+        # if (self.match[self.board.ply()][f"{origin_column}"]) and (self.board.ply() >= 2):
+        #     self.match_qtde[self.board.ply()][f"{recency_column}"] = 0
+
+        # elif (not self.match[self.board.ply()][f"{origin_column}"]) and (self.board.ply() >= 2):
+        #     self.match_qtde[self.board.ply()][f"{recency_column}"] = self.match_qtde[self.board.ply() - 1][f"{recency_column}"] + 2
+
+    def opp_recency_piece(self):
+        for p in pieces:
+            piece_name = chess.piece_name(p)
+
+            if self.board.ply() < 1:
+                self.match_opp[self.board.ply()][f"opp_recency_{piece_name}_piece"] = 0
+            else:
+                past_move = self.match_qtde[self.board.ply()-1][f"recency_{piece_name}_move"]
+                self.match_opp[self.board.ply()][f"opp_recency_{piece_name}_piece"] = past_move
 
 def pipeline_fs(pgn_str):
     pgn = io.StringIO(pgn_str)
@@ -200,13 +231,12 @@ def pipeline_fs(pgn_str):
         match[board.ply()]["move"] = move
         if turn == white:
             match[board.ply()]["turn"] = "white"
-
         else:
             match[board.ply()]["turn"] = "black"
 
 
         # # features about the move turn
-        fs_moves.move_piece()
+        # fs_moves.move_piece()
         # fs_moves.is_capture()
         # fs_moves.is_irreversible()
         # fs_moves.is_in_check()
@@ -219,25 +249,28 @@ def pipeline_fs(pgn_str):
         # fs_moves.has_queen_castled()
 
         # # features about the move turn Qtde
-        # for p in pieces[:-1]:
-        #     fs_qtde.qtde_pieces(p)
-        #     fs_qtde.diff_piece(p)
-
+        # fs_qtde.qtde_pieces()
+        # fs_qtde.diff_piece()
         # fs_qtde.qtde_move("qtde_gives_check", "gives_check")
         # fs_qtde.qtde_move("qtde_is_in_check", "is_in_check")
         # fs_qtde.qtde_move("qtde_capture", "is_capture")
         # fs_qtde.qtde_move("qtde_irreversible", "is_irreversible")
 
         # # features about recency
-        # fs_qtde.recency("ply_without_capture", "is_capture")
-        # fs_qtde.recency("ply_without_in_check", "is_in_check")
-        # fs_qtde.recency("ply_without_gives_check", "gives_check")
-        # fs_qtde.recency("ply_without_is_irreversible", "is_irreversible")
+        # fs_qtde.recency("recency_capture", "is_capture")
+        # fs_qtde.recency("recency_in_check", "is_in_check")
+        # fs_qtde.recency("recency_gives_check", "gives_check")
+        # fs_qtde.recency("recency_is_irreversible", "is_irreversible")
+        # fs_qtde.recency_piece()
 
-        # for p in pieces[:]:
-        fs_qtde.recency_pieces()
+        # # features about recency opponent
+        # fs_opp.opp_recency_piece()
+        # fs_opp.opp_recency("opp_recency_capture", "recency_capture")
+        # fs_opp.opp_recency("opp_recency_in_check", "recency_in_check")
+        # fs_opp.opp_recency("opp_recency_gives_check", "recency_gives_check")
+        # fs_opp.opp_recency("opp_recency_is_irreversible", "recency_is_irreversible")
 
-        # # features about de opponent
+        # # features about opponent
         # fs_opp.opp_move("opp_has_2_repetition", "has_2_repetition")
         # fs_opp.opp_move("opp_has_castled", "has_castled")
         # fs_opp.opp_move("opp_has_queen_castled", "has_queen_castled")
@@ -257,7 +290,7 @@ match_qtde_df = pd.DataFrame(match_qtde)
 match_opp_df = pd.DataFrame(match_opp)
 
 teste = pd.concat([match_df, match_qtde_df, match_opp_df], axis=1)
-teste.head(20)
+teste.tail(30)
 # %%
 df_base.iloc[2]
 # match
