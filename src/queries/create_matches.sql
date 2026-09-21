@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS matches (
     uuid TEXT PRIMARY KEY,
+    pgn TEXT,
     url TEXT,
     date TEXT,
     eco TEXT,

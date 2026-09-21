@@ -32,7 +32,7 @@ COLUMNS_BLACK = {
     "uuid":"black_uuid",
     }
 GAME_MODES = ["bullet", "blitz", "rapid"]
-REMOVE_COLUMNS = ["pgn", "accuracies", "white", "black"]
+REMOVE_COLUMNS = ["accuracies", "white", "black"]
 
 def search_pgn(cat, text):
     match = re.search(rf'\[{cat} "([^"]+)"\]', text)
