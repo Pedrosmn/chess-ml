@@ -225,6 +225,9 @@ def pipeline_fs_match(pgn_str, uuid):
     game = chess.pgn.read_game(pgn)
     board = game.board()
 
+    if board.ply() != 0:
+        return None, None, None
+
     match = []
     match_qtde = []
     match_opp = []
@@ -301,43 +304,58 @@ def pipeline_fs_match(pgn_str, uuid):
 def pipeline_fs_all():
 
     df = pd.read_sql("matches", con)
-    df = df.dropna(subset=["pgn"])
+    df = df.dropna(subset=["pgn"]).reset_index(drop=True)
 
-    matches_all = []
-    matches_all_qtde = []
-    matches_all_opp = []
+    batch_size = 500
+    droped = 0
 
     print("Iniciando pipeline da Feature Store")
 
-    for i in tqdm(range(len(df))):
+    for start in tqdm(range(0, len(df), batch_size)):
 
-        match, match_qtde, match_opp = pipeline_fs_match(
-            pgn_str=df.iloc[i]["pgn"],
-            uuid=df.iloc[i]["uuid"]
+        batch = df.iloc[start:start + batch_size]
+
+        matches_all = []
+        matches_all_qtde = []
+        matches_all_opp = []
+
+        for _, row in batch.iterrows():
+
+            match, match_qtde, match_opp = pipeline_fs_match(
+                pgn_str=row["pgn"],
+                uuid=row["uuid"]
+            )
+
+            if match is None:
+                droped += 1
+                continue
+
+            matches_all.extend(match)
+            matches_all_qtde.extend(match_qtde)
+            matches_all_opp.extend(match_opp)
+
+        match_df = pd.DataFrame(matches_all)
+        match_qtde_df = pd.DataFrame(matches_all_qtde)
+        match_opp_df = pd.DataFrame(matches_all_opp)
+
+        matches = pd.concat(
+            [match_df, match_qtde_df, match_opp_df],
+            axis=1
         )
 
-        matches_all.extend(match)
-        matches_all_qtde.extend(match_qtde)
-        matches_all_opp.extend(match_opp)
+        matches.to_sql(
+            "feature_store",
+            con,
+            if_exists="append",
+            index=False
+        )
 
-    match_df = pd.DataFrame(matches_all)
-    match_qtde_df = pd.DataFrame(matches_all_qtde)
-    match_opp_df = pd.DataFrame(matches_all_opp)
-
-    matches = pd.concat(
-        [match_df, match_qtde_df, match_opp_df],
-        axis=1
-    )
-
-    return matches
-
-def send_fs(df, con, table="feature_store"):
-    df.to_sql(table, con=con, if_exists="replace", index=False)
-    print("Inserção da Feature Store no database concluída")
+    print(f"{droped} partidas descartadas")
+    print(f"Feature Store inserida no database")
 
 def main():
-    feature_store_df = pipeline_fs_all()
-    send_fs(feature_store_df, con)
+    pipeline_fs_all()
 
 if __name__ == "__main__":
     main()
+    
