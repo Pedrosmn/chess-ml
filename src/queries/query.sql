@@ -1,1 +1,1 @@
-SELECT * FROM matches
+SELECT * FROM feature_store

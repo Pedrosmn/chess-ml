@@ -1,19 +1,10 @@
-# %%
-
 import pandas as pd
 import chess.pgn
 import sqlalchemy
 import io
+from tqdm import tqdm
 
 con = sqlalchemy.create_engine("sqlite:///../data/db/database.db")
-
-pieces = chess.PIECE_TYPES
-white = chess.WHITE
-black = chess.BLACK
-df_base = pd.read_sql("matches", con)
-df_base
-
-# %%
 
 class GameContext:
 
@@ -26,6 +17,7 @@ class GameContext:
         self.game = game
         self.match_qtde = match_qtde
         self.match_opp = match_opp
+        self.pieces = chess.PIECE_TYPES
 
 class FsMove:
 
@@ -35,13 +27,18 @@ class FsMove:
         self.game = game_context.game
         self.move = game_context.move
         self.piece = game_context.piece
-        self.match_qtde = game_context.match_qtde
+
+    def uuid(self, uuid):
+        self.match[self.board.ply()]["uuid"] = uuid
 
     def fullmove_count(self):
         self.match[self.board.ply()]["fullmove_count"] = self.board.fullmove_number
 
+    def ply_count(self):
+        self.match[self.board.ply()]["ply_count"] = self.board.ply()
+
     def move_not(self):
-        self.match[self.board.ply()]["move"] = self.move
+        self.match[self.board.ply()]["move"] = str(self.move)
 
     def time_control(self):
         self.match[self.board.ply()]["time_control"] = self.game.headers["TimeControl"]
@@ -130,13 +127,11 @@ class FsQtde:
     def __init__(self, game_context):
         self.board = game_context.board
         self.match = game_context.match
-        self.move = game_context.move
-        self.piece = game_context.piece
         self.match_qtde = game_context.match_qtde
-        self.match_opp = game_context.match_opp
+        self.pieces = chess.PIECE_TYPES
 
     def qtde_pieces(self):
-        for p in pieces:
+        for p in self.pieces:
             piece_name = chess.piece_name(p)
             turn_color = self.board.turn
 
@@ -144,7 +139,7 @@ class FsQtde:
                 self.board.pieces(p, turn_color))
 
     def diff_piece(self):
-        for p in pieces:
+        for p in self.pieces:
             piece_name = chess.piece_name(p)
             turn_color = self.board.turn
             opponent = not self.board.turn
@@ -173,8 +168,7 @@ class FsQtde:
             self.match_qtde[self.board.ply()][f"{recency_column}"] = self.match_qtde[self.board.ply() - 2][f"{recency_column}"] + 2
 
     def recency_piece(self):
-
-        for p in pieces:
+        for p in self.pieces:
             piece_name = chess.piece_name(p)
             if self.board.ply() < 2:
                 self.match_qtde[self.board.ply()][f"recency_{piece_name}_move"] = 0
@@ -185,16 +179,14 @@ class FsQtde:
             elif (self.match[self.board.ply()][f"move_piece"] != f"{piece_name}") and (self.board.ply() >= 2):
                 self.match_qtde[self.board.ply()][f"recency_{piece_name}_move"] = self.match_qtde[self.board.ply() - 2][f"recency_{piece_name}_move"] + 2
 
-
 class FsOpp:
 
     def __init__(self, game_context):
         self.board = game_context.board
         self.match = game_context.match
-        self.move = game_context.move
-        self.piece = game_context.piece
         self.match_qtde = game_context.match_qtde
         self.match_opp = game_context.match_opp
+        self.pieces = chess.PIECE_TYPES
 
     def opp_move(self, opp_column, origin_column):
         if self.board.ply() >= 2:
@@ -219,7 +211,7 @@ class FsOpp:
                 self.match_opp[self.board.ply()][recency_column] = past_move
 
     def opp_recency_piece(self):
-        for p in pieces:
+        for p in self.pieces:
             piece_name = chess.piece_name(p)
 
             if self.board.ply() < 1:
@@ -228,7 +220,7 @@ class FsOpp:
                 past_move = self.match_qtde[self.board.ply()-1][f"recency_{piece_name}_move"]
                 self.match_opp[self.board.ply()][f"opp_recency_{piece_name}_piece"] = past_move
 
-def pipeline_fs(pgn_str):
+def pipeline_fs_match(pgn_str, uuid):
     pgn = io.StringIO(pgn_str)
     game = chess.pgn.read_game(pgn)
     board = game.board()
@@ -249,6 +241,8 @@ def pipeline_fs(pgn_str):
         fs_opp = FsOpp(game_context)
 
         # features headers
+        fs_moves.uuid(uuid)
+        fs_moves.ply_count()
         fs_moves.fullmove_count()
         fs_moves.move_not()
         fs_moves.time_control()
@@ -304,20 +298,46 @@ def pipeline_fs(pgn_str):
 
     return match, match_qtde, match_opp
 
+def pipeline_fs_all():
 
-pgn_str = df_base.iloc[202]["pgn"]
-match, match_qtde, match_opp = pipeline_fs(pgn_str)
-match_df = pd.DataFrame(match)
-match_qtde_df = pd.DataFrame(match_qtde)
-match_opp_df = pd.DataFrame(match_opp)
+    df_to = pd.read_sql("matches", con)
+    df = df_to.head()
 
-teste = pd.concat([match_df, match_qtde_df, match_opp_df], axis=1)
-teste.tail(30)
-# %%
-df_base.iloc[7]
-# match
+    matches_all = []
+    matches_all_qtde = []
+    matches_all_opp = []
 
+    print("Iniciando pipeline da Feature Store")
 
-# %%
-t = pd.read_parquet("/home/pedro/documents/Estudos/chess-ml/data/raw/blitz/Andreikka_2026-09-04_10-46-30.parquet")
-t
+    for i in tqdm(range(len(df))):
+
+        match, match_qtde, match_opp = pipeline_fs_match(
+            pgn_str=df.iloc[i]["pgn"],
+            uuid=df.iloc[i]["uuid"]
+        )
+
+        matches_all.extend(match)
+        matches_all_qtde.extend(match_qtde)
+        matches_all_opp.extend(match_opp)
+
+    match_df = pd.DataFrame(matches_all)
+    match_qtde_df = pd.DataFrame(matches_all_qtde)
+    match_opp_df = pd.DataFrame(matches_all_opp)
+
+    matches = pd.concat(
+        [match_df, match_qtde_df, match_opp_df],
+        axis=1
+    )
+
+    return matches
+
+def send_fs(df, con, table="feature_store"):
+    df.to_sql(table, con=con, if_exists="replace", index=False)
+    print("Inserção da Feature Store no database concluída")
+
+def main():
+    feature_store_df = pipeline_fs_all()
+    send_fs(feature_store_df, con)
+
+if __name__ == "__main__":
+    main()
