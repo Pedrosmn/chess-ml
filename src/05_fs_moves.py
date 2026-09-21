@@ -300,8 +300,7 @@ def pipeline_fs_match(pgn_str, uuid):
 
 def pipeline_fs_all():
 
-    df_to = pd.read_sql("matches", con)
-    df = df_to.head()
+    df = pd.read_sql("matches", con)
 
     matches_all = []
     matches_all_qtde = []
