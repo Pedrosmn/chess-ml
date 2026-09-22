@@ -3,8 +3,13 @@ import chess.pgn
 import sqlalchemy
 import io
 from tqdm import tqdm
+from warnings import simplefilter
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 con = sqlalchemy.create_engine("sqlite:///../data/db/database.db")
+
+LAGS = [1,2,3,5,7]
+FEATURES_HEADERS = {"uuid", "ply_count", "fullmove_count", "move", "time_control", "turn", "elo_diff"}
 
 class GameContext:
 
@@ -220,6 +225,16 @@ class FsOpp:
                 past_move = self.match_qtde[self.board.ply()-1][f"recency_{piece_name}_move"]
                 self.match_opp[self.board.ply()][f"opp_recency_{piece_name}_piece"] = past_move
 
+def features_lag(df):
+    features = df.columns.to_list()
+
+    for f in features:
+        for lag in LAGS:
+            if f not in FEATURES_HEADERS:
+                df[f"{f}_d{lag}"] = (df.groupby("uuid")[f].shift(lag*2))
+
+    return df
+
 def pipeline_fs_match(pgn_str, uuid):
     pgn = io.StringIO(pgn_str)
     game = chess.pgn.read_game(pgn)
@@ -298,11 +313,7 @@ def pipeline_fs_match(pgn_str, uuid):
 
     return match, match_qtde, match_opp
 
-def pipeline_fs_all():
-
-    df = pd.read_sql("matches", con)
-    df = df.dropna(subset=["pgn"]).reset_index(drop=True)
-
+def pipeline_fs_all(df):
     batch_size = 500
 
     print("Iniciando pipeline da Feature Store")
@@ -334,9 +345,10 @@ def pipeline_fs_all():
             [match_df, match_qtde_df, match_opp_df],
             axis=1
         )
+        matches = features_lag(matches)
 
         matches.to_sql(
-            "feature_store_moves",
+            "feature_store",
             con,
             if_exists="append",
             index=False
@@ -345,7 +357,10 @@ def pipeline_fs_all():
     print(f"Feature Store inserida no database")
 
 def main():
-    pipeline_fs_all()
+
+    df_teste = pd.read_sql("matches", con)
+    df = df_teste.iloc[2:5]
+    pipeline_fs_all(df)
 
 if __name__ == "__main__":
     main()
