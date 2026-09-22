@@ -9,14 +9,15 @@ simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 con = sqlalchemy.create_engine("sqlite:///../data/db/database.db")
 
 LAGS = [1,2,3,5,7]
-FEATURES_HEADERS = {"uuid", "ply_count", "fullmove_count", "move", "time_control", "turn", "elo_diff"}
+FEATURES_HEADERS = {"uuid", "ply_count", "fullmove_count", "move", "time_control", "turn", "elo_diff", "clock"}
 
 class GameContext:
 
-    def __init__(self, board, ply, move, piece, match, game, match_qtde=None, match_opp=None):
+    def __init__(self, board, ply, move, clock, piece, match, game, match_qtde=None, match_opp=None):
         self.board = board
         self.ply = ply
         self.move = move
+        self.clock = clock
         self.piece = piece
         self.match = match
         self.game = game
@@ -31,6 +32,7 @@ class FsMove:
         self.match = game_context.match
         self.game = game_context.game
         self.move = game_context.move
+        self.clock = game_context.clock
         self.piece = game_context.piece
 
     def uuid(self, uuid):
@@ -61,6 +63,15 @@ class FsMove:
             self.match[self.board.ply()]["elo_diff"] = int(self.game.headers["WhiteElo"]) - int(self.game.headers["BlackElo"])
         else:
             self.match[self.board.ply()]["elo_diff"] = int(self.game.headers["BlackElo"]) - int(self.game.headers["WhiteElo"])
+
+    def time_clock(self):
+        self.match[self.board.ply()]["clock"] = self.clock
+
+    def time_diff(self):
+        if self.board.ply() >= 2:
+            self.match[self.board.ply()]["time_diff"] = self.match[self.board.ply()]["clock"] - self.match[self.board.ply() - 1]["clock"]
+        else:
+            self.match[self.board.ply()]["time_diff"] = 0
 
     def is_capture(self):
         self.match[self.board.ply()]["is_capture"] = self.board.is_capture(self.move)
@@ -244,13 +255,15 @@ def pipeline_fs_match(pgn_str, uuid):
     match_qtde = []
     match_opp = []
 
-    for move in game.mainline_moves():
+    for node in game.mainline():
+        move = node.move
         match.append({})
         match_qtde.append({})
         match_opp.append({})
         piece = board.piece_at(move.from_square)
+        clock = node.clock()
 
-        game_context = GameContext(board=board, ply=board.ply(), move=move, piece=piece, match=match, game=game, match_qtde=match_qtde, match_opp=match_opp)
+        game_context = GameContext(board=board, ply=board.ply(), move=move, clock=clock, piece=piece, match=match, game=game, match_qtde=match_qtde, match_opp=match_opp)
         fs_moves = FsMove(game_context)
         fs_qtde = FsQtde(game_context)
         fs_opp = FsOpp(game_context)
@@ -263,6 +276,8 @@ def pipeline_fs_match(pgn_str, uuid):
         fs_moves.time_control()
         fs_moves.turn()
         fs_moves.elo_diff()
+        fs_moves.time_clock()
+        fs_moves.time_diff()
 
         # features about the move turn
         fs_moves.move_piece()
@@ -357,9 +372,7 @@ def pipeline_fs_all(df):
     print(f"Feature Store inserida no database")
 
 def main():
-
-    df_teste = pd.read_sql("matches", con)
-    df = df_teste.iloc[2:5]
+    df = pd.read_sql("matches", con)
     pipeline_fs_all(df)
 
 if __name__ == "__main__":
