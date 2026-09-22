@@ -1,2 +1,1 @@
-select * from feature_store
-limit 100
+SELECT count(*) FROM feature_store_moves

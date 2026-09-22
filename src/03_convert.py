@@ -70,6 +70,18 @@ def remove_columns(df):
     df = df.drop(columns=columns)
     return df
 
+def remove_nan(df):
+    df = df.dropna(subset=["pgn"]).reset_index(drop=True)
+    return df
+
+def remove_chess_variant(df):
+    df = df.iloc[df["rules"] == "chess"]
+    return df
+
+def remove_rated_false(df):
+    df = df.iloc[df["rated"] == True]
+    return df
+
 def load_json(json_path):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -102,6 +114,9 @@ def convert_dir(dir_names=None):
             df = load_json(file)
             df = add_all_columns(df)
             df = remove_columns(df)
+            df = remove_nan(df)
+            df = remove_chess_variant(df)
+            df = remove_rated_false(df)
             save_parquet(df, filename_prefix=file.stem, output_dir=output_dir_path)
 
 def main():

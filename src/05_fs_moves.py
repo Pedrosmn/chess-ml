@@ -225,9 +225,6 @@ def pipeline_fs_match(pgn_str, uuid):
     game = chess.pgn.read_game(pgn)
     board = game.board()
 
-    if board.ply() != 0:
-        return None, None, None
-
     match = []
     match_qtde = []
     match_opp = []
@@ -307,7 +304,6 @@ def pipeline_fs_all():
     df = df.dropna(subset=["pgn"]).reset_index(drop=True)
 
     batch_size = 500
-    droped = 0
 
     print("Iniciando pipeline da Feature Store")
 
@@ -326,10 +322,6 @@ def pipeline_fs_all():
                 uuid=row["uuid"]
             )
 
-            if match is None:
-                droped += 1
-                continue
-
             matches_all.extend(match)
             matches_all_qtde.extend(match_qtde)
             matches_all_opp.extend(match_opp)
@@ -344,13 +336,12 @@ def pipeline_fs_all():
         )
 
         matches.to_sql(
-            "feature_store",
+            "feature_store_moves",
             con,
             if_exists="append",
             index=False
         )
 
-    print(f"{droped} partidas descartadas")
     print(f"Feature Store inserida no database")
 
 def main():
