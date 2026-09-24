@@ -1,2 +1,1 @@
-SELECT * FROM abt 
-GROUP BY uuid 
+.tables

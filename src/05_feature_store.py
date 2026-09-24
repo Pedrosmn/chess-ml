@@ -1,5 +1,5 @@
 import pandas as pd
-import chess.pgn
+import chess.pgn # type: ignore
 import sqlalchemy
 import io
 from tqdm import tqdm
