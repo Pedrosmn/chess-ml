@@ -4,6 +4,7 @@ WITH results AS (
     SELECT 
         uuid,
         result,
+        time_class,
         CASE 
             WHEN result = '1-0' THEN 'white' 
             WHEN result = '0-1' THEN 'black' 
@@ -18,6 +19,7 @@ upset_tb AS (
     SELECT 
         t2.result_desc,
         t2.uuid,
+        t2.time_class,
         t1.elo_diff,
         t1.turn,
         CASE 
@@ -40,6 +42,7 @@ SELECT
     t1.ply_count,
     t2.fl_upset,
     t1.time_control,
+    t2.time_class,
     t1.turn,
     t1.elo_diff,
     t1.time_diff,

@@ -1,1 +1,1 @@
-.tables
+drop table abt
