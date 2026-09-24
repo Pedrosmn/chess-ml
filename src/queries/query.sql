@@ -1,1 +1,1 @@
-SELECT * FROM matches
+.tables
