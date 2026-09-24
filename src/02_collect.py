@@ -58,7 +58,7 @@ class ChessComCollector:
         return filepath 
 
 def get_leaderboard_games(leaderboard_players,
-                            qtde_matches=200,
+                            qtde_matches=50,
                             headers=None,
                             time_classes=("bullet", "rapid", "blitz")):
     headers = def_headers(headers)
@@ -80,7 +80,7 @@ def get_leaderboard_games(leaderboard_players,
             if partidas:
                 collector.save_json(partidas, filename_prefix=f"{time_class}/{player}")
 
-            time.sleep(1)
+            time.sleep(2)
     
     return True
 
@@ -120,7 +120,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--top_n", default=50, type=int, help="number of top-ranked players (max=50) (default=50)")
     parser.add_argument("--time_class", nargs="+", choices=["bullet", "blitz", "rapid"], default=["bullet", "blitz", "rapid"])
-    parser.add_argument("--qtde_matches", default=200, type=int)
+    parser.add_argument("--qtde_matches", default=30, type=int)
 
     args = parser.parse_args()
 

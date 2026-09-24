@@ -8,7 +8,7 @@ simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 con = sqlalchemy.create_engine("sqlite:///../data/db/database.db")
 
-LAGS = [1,2,3,5,7]
+LAGS = [1,3,5]
 FEATURES_HEADERS = {"uuid", "ply_count", "fullmove_count", "move", "time_control", "turn", "elo_diff", "clock"}
 
 class GameContext:
@@ -81,9 +81,6 @@ class FsMove:
 
     def is_irreversible(self):
         self.match[self.board.ply()]["is_irreversible"] = self.board.is_irreversible(self.move)
-
-    def is_in_check(self):
-        self.match[self.board.ply()]["is_in_check"] = self.board.is_check()
 
     def gives_check(self):
         self.match[self.board.ply()]["gives_check"] = self.board.gives_check(self.move)
@@ -283,7 +280,6 @@ def pipeline_fs_match(pgn_str, uuid):
         fs_moves.move_piece()
         fs_moves.is_capture()
         fs_moves.is_irreversible()
-        fs_moves.is_in_check()
         fs_moves.gives_check()
         fs_moves.is_2_repetition()
         fs_moves.has_2_repetition()
@@ -306,13 +302,11 @@ def pipeline_fs_match(pgn_str, uuid):
         fs_qtde.qtde_pieces()
         fs_qtde.diff_piece()
         fs_qtde.qtde_move("qtde_gives_check", "gives_check")
-        fs_qtde.qtde_move("qtde_is_in_check", "is_in_check")
         fs_qtde.qtde_move("qtde_capture", "is_capture")
         fs_qtde.qtde_move("qtde_irreversible", "is_irreversible")
 
         # features about recency
         fs_qtde.recency("recency_capture", "is_capture")
-        fs_qtde.recency("recency_in_check", "is_in_check")
         fs_qtde.recency("recency_gives_check", "gives_check")
         fs_qtde.recency("recency_is_irreversible", "is_irreversible")
         fs_qtde.recency_piece()
@@ -320,7 +314,6 @@ def pipeline_fs_match(pgn_str, uuid):
         # features about recency opponent
         fs_opp.opp_recency_piece()
         fs_opp.opp_recency("opp_recency_capture", "recency_capture")
-        fs_opp.opp_recency("opp_recency_in_check", "recency_in_check")
         fs_opp.opp_recency("opp_recency_gives_check", "recency_gives_check")
         fs_opp.opp_recency("opp_recency_is_irreversible", "recency_is_irreversible")
 
