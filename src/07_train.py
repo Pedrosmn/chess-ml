@@ -1,9 +1,10 @@
 # %%
 
 import pandas as pd
+import numpy as np
 import sqlalchemy
 from sklearn import model_selection
-from sklearn import ensemble
+from sklearn import ensemble, tree
 from sklearn import metrics
 from feature_engine import imputation, encoding
 pd.set_option('display.max_columns', None)
@@ -20,7 +21,7 @@ matches = df[["uuid", "fl_upset"]].drop_duplicates()
 train, test = model_selection.train_test_split(
     matches,
     random_state=42,
-    train_size=0.8,
+    train_size=0.7,
     stratify=matches["fl_upset"],
 )
 
@@ -216,6 +217,33 @@ y_test_end = y_test.iloc[X_test_transform_end.index]
 # X_train_trans_end = imp_none.fit_transform(X=X_train_trans_end)
 
 # X_train_trans_end = one_hot.fit_transform(X=X_train_trans_end)
+
+
+# %%
+
+dt = tree.DecisionTreeClassifier(random_state=42)
+dt.fit(X_train_transform, y_train)
+
+# %%
+
+feature_importances = (pd.Series(dt.feature_importances_, index=X_train_transform.columns).sort_values(ascending=False).reset_index())
+
+feature_importances["acum."] = feature_importances[0].cumsum()
+feature_importances[feature_importances["acum."] < 0.96]
+
+# %%
+
+
+features_selected = feature_importances.loc[
+    feature_importances["acum."] < 0.96,
+    "index"
+].tolist()
+
+X_train_selected = X_train_transform[features_selected]
+X_test_selected = X_test_transform[features_selected]
+# %%
+X_train_selected.columns.to_list()
+
 # %%
 
 rf = ensemble.RandomForestClassifier(
@@ -223,47 +251,123 @@ rf = ensemble.RandomForestClassifier(
     min_samples_leaf=50,
     random_state=42,
     n_jobs=3,
+    max_depth=8,
 )
 
-rf.fit(X_train_transform, y_train)
+# rf.fit(X_train_transform, y_train)
+
+# from sklearn.ensemble import AdaBoostClassifier
+# from sklearn.tree import DecisionTreeClassifier
+
+# rf = AdaBoostClassifier(
+#     n_estimators=300,
+#     learning_rate=0.05,
+#     random_state=42,
+# )
+
+rf.fit(X_train_selected, y_train)
 
 # %%
 
-y_train_early_proba = rf.predict_proba(X_train_transform_early)[:,1]
+ply_train_selected = df_train.loc[X_train_selected.index, "ply_count"]
+ply_test_selected = df_test.loc[X_test_selected.index, "ply_count"]
+
+mask_early_train = ply_train_selected <= 20
+mask_mid_train = (ply_train_selected > 20) & (ply_train_selected <= 60)
+mask_end_train = ply_train_selected > 60
+
+mask_early_test = ply_test_selected <= 20
+mask_mid_test = (ply_test_selected > 20) & (ply_test_selected <= 60)
+mask_end_test = ply_test_selected > 60
+
+X_train_early = X_train_selected.loc[mask_early_train]
+X_train_mid = X_train_selected.loc[mask_mid_train]
+X_train_end = X_train_selected.loc[mask_end_train]
+
+X_test_early = X_test_selected.loc[mask_early_test]
+X_test_mid = X_test_selected.loc[mask_mid_test]
+X_test_end = X_test_selected.loc[mask_end_test]
+
+
+y_train_early = y_train.loc[X_train_early.index]
+y_train_mid = y_train.loc[X_train_mid.index]
+y_train_end = y_train.loc[X_train_end.index]
+
+y_test_early = y_test.loc[X_test_early.index]
+y_test_mid = y_test.loc[X_test_mid.index]
+y_test_end = y_test.loc[X_test_end.index]
+
+
+
+# %%
+X_train_selected_early = X_train_selected.loc[ply_train_selected["ply_count"] <= 20]
+X_train_selected_early = X_train_selected_early.drop(columns=["ply_count"])
+
+X_train_selected_mid = X_train_selected.loc[(X_train_selected["ply_count"] > 20) & (X_train_selected["ply_count"] <= 60)]
+X_train_selected_mid = X_train_selected_mid.drop(columns=["ply_count"])
+
+X_train_selected_end = X_train_selected.loc[X_train_selected["ply_count"] > 60]
+X_train_selected_end = X_train_selected_end.drop(columns=["ply_count"])
+
+X_train_selected = X_train_selected.drop(columns=["ply_count"])
+
+
+X_test_selected_early = X_test_selected.loc[X_test_selected["ply_count"] <= 20]
+X_test_selected_early = X_test_selected_early.drop(columns=["ply_count"])
+
+X_test_selected_mid = X_test_selected.loc[(X_test_selected["ply_count"] > 20) & (X_test_selected["ply_count"] <= 60)]
+X_test_selected_mid = X_test_selected_mid.drop(columns=["ply_count"])
+
+X_test_selected_end = X_test_selected.loc[X_test_selected["ply_count"] > 60]
+X_test_selected_end = X_test_selected_end.drop(columns=["ply_count"])
+
+X_test_selected = X_test_selected.drop(columns=["ply_count"])
+
+
+# %%
+y_train_early = y_train.iloc[X_train_selected_early.index]
+y_train_mid = y_train.iloc[X_train_selected_mid.index]
+y_train_end = y_train.iloc[X_train_selected_end.index]
+
+y_test_early = y_test.iloc[X_test_selected_early.index]
+y_test_mid = y_test.iloc[X_test_selected_mid.index]
+y_test_end = y_test.iloc[X_test_selected_end.index]
+
+# %%
+
+y_train_early_proba = rf.predict_proba(X_train_early)[:,1]
 auc_train_early = metrics.roc_auc_score(y_train_early, y_train_early_proba)
 
 print(f"AUC Train Early: {auc_train_early}")
 
-y_test_early_proba = rf.predict_proba(X_test_transform_early)[:,1]
+y_test_early_proba = rf.predict_proba(X_test_early)[:,1]
 auc_test_early = metrics.roc_auc_score(y_test_early, y_test_early_proba)
 
 print(f"AUC test Early: {auc_test_early}")
 
-# %%
 
-y_train_mid_proba = rf.predict_proba(X_train_transform_mid)[:,1]
+y_train_mid_proba = rf.predict_proba(X_train_mid)[:,1]
 auc_train_mid = metrics.roc_auc_score(y_train_mid, y_train_mid_proba)
 
 print(f"AUC Train mid: {auc_train_mid}")
 
-y_test_mid_proba = rf.predict_proba(X_test_transform_mid)[:,1]
+y_test_mid_proba = rf.predict_proba(X_test_mid)[:,1]
 auc_test_mid = metrics.roc_auc_score(y_test_mid, y_test_mid_proba)
 
 print(f"AUC test mid: {auc_test_mid}")
-# %%
 
-y_train_end_proba = rf.predict_proba(X_train_transform_end)[:,1]
+y_train_end_proba = rf.predict_proba(X_train_end)[:,1]
 auc_train_end = metrics.roc_auc_score(y_train_end, y_train_end_proba)
 
 print(f"AUC Train end: {auc_train_end}")
 
-y_test_end_proba = rf.predict_proba(X_test_transform_end)[:,1]
+y_test_end_proba = rf.predict_proba(X_test_end)[:,1]
 auc_test_end = metrics.roc_auc_score(y_test_end, y_test_end_proba)
 
 print(f"AUC test end: {auc_test_end}")
 
 # %%
 
-feature_importances = pd.Series(rf.feature_importances_, index=X_train_transform.columns.to_list())
-feature_importances = feature_importances.sort_values(ascending=False)
-feature_importances.head(40)
+feature_importances_rf = pd.Series(rf.feature_importances_, index=X_train_selected.columns.to_list())
+feature_importances_rf = feature_importances_rf.sort_values(ascending=False)
+feature_importances_rf.head(30)
