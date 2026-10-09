@@ -6,7 +6,7 @@ import sqlalchemy
 from sklearn import model_selection
 from sklearn import ensemble, tree
 from sklearn import metrics
-from feature_engine import imputation, encoding
+from feature_engine import imputation, encoding, discretisation
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
@@ -146,68 +146,189 @@ print("Quantidade de Missing: ", (X_train_transform.isna().sum().sum()))
 
 # %%
 
-### Summary
+# ### Summary
 
-# game phases X_train
+# # game phases X_train
 
-X_train_transform_early = X_train_transform.loc[((X_train_transform["ply_count"] <= 15) &
-                                                (X_train_transform["qtde_queen"] == 1))]
-X_train_transform_early = X_train_transform_early.drop(columns=["ply_count"])
+# X_train_transform_early = X_train_transform.loc[((X_train_transform["ply_count"] <= 15) &
+#                                                 (X_train_transform["qtde_queen"] == 1))]
+# X_train_transform_early = X_train_transform_early.drop(columns=["ply_count"])
 
-X_train_transform_mid = X_train_transform.loc[((X_train_transform["ply_count"] > 15) & 
-                                              (X_train_transform["ply_count"] <= 60) &
-                                              (X_train_transform["qtde_queen"] == 1))]
-X_train_transform_mid = X_train_transform_mid.drop(columns=["ply_count"])
+# X_train_transform_mid = X_train_transform.loc[((X_train_transform["ply_count"] > 15) & 
+#                                               (X_train_transform["ply_count"] <= 60) &
+#                                               (X_train_transform["qtde_queen"] == 1))]
+# X_train_transform_mid = X_train_transform_mid.drop(columns=["ply_count"])
 
-X_train_transform_end = X_train_transform.loc[((X_train_transform["ply_count"] > 60) |
-                                              (X_train_transform["qtde_queen"] == 0))]
-X_train_transform_end = X_train_transform_end.drop(columns=["ply_count"])
+# X_train_transform_end = X_train_transform.loc[((X_train_transform["ply_count"] > 60) |
+#                                               (X_train_transform["qtde_queen"] == 0))]
+# X_train_transform_end = X_train_transform_end.drop(columns=["ply_count"])
 
-X_train_transform = X_train_transform.drop(columns=["ply_count"])
+# X_train_transform = X_train_transform.drop(columns=["ply_count"])
+
+# # %%
+# # game phases y_train
+# y_train_early = y_train.iloc[X_train_transform_early.index]
+# y_train_mid = y_train.iloc[X_train_transform_mid.index]
+# y_train_end = y_train.iloc[X_train_transform_end.index]
+
+
+# # %%
+
+# df_explore_early = X_train_transform_early.copy()
+# df_explore_early[target] = y_train_early
+
+# df_explore_mid = X_train_transform_mid.copy()
+# df_explore_mid[target] = y_train_mid
+
+# df_explore_end = X_train_transform_end.copy()
+# df_explore_end[target] = y_train_end
+
+# # %%
+# summary_early = df_explore_early.groupby("fl_upset").agg(["mean", "median"]).T
+# summary_early["diff_abs"] = (summary_early[0]) - (summary_early[1])
+# summary_early["diff_rel"] = (summary_early[0]) / (summary_early[1])
+# summary_early.sort_values("diff_rel", ascending=False)
+# # %%
+# summary_mid = df_explore_mid.groupby("fl_upset").agg(["mean", "median"]).T
+# summary_mid["diff_abs"] = (summary_mid[0]) - (summary_mid[1])
+# summary_mid["diff_rel"] = (summary_mid[0]) / (summary_mid[1])
+# summary_mid.sort_values("diff_rel", ascending=False)
+# # %%
+# summary_end = df_explore_end.groupby("fl_upset").agg(["mean", "median"]).T
+# summary_end["diff_abs"] = (summary_end[0]) - (summary_end[1])
+# summary_end["diff_rel"] = (summary_end[0]) / (summary_end[1])
+# summary_end.sort_values("diff_rel", ascending=False)
 
 # %%
+
+## DISCRETIZATION
+
+features_discretization = X_train_transform.columns[~X_train_transform.isin([0,1]).all()].tolist()
+features_discretization.remove('ply_count')
+X_train_transform[features_discretization].head()
+
+# %%
+
+tree_discretization = discretisation.DecisionTreeDiscretiser(
+    variables=features_discretization,
+    regression=False,
+    bin_output="bin_number",
+    cv=3,
+)
+
+X_train_transform = tree_discretization.fit_transform(X_train_transform, y_train)
+
+# %%
+
+one_hot_disc = encoding.OneHotEncoder(variables=features_discretization, ignore_format=True)
+X_train_transform = one_hot_disc.fit_transform(X_train_transform, y_train)
+
+# %%
+dtc = tree.DecisionTreeClassifier(random_state=42)
+X_train_transform_ply = X_train_transform.copy()
+X_train_transform = X_train_transform.drop(columns=['ply_count'])
+dtc.fit(X_train_transform, y_train)
+
+feature_importance = pd.Series(dtc.feature_importances_, index=X_train_transform.columns).sort_values(ascending=False).reset_index()
+feature_importance["acum."] = feature_importance[0].cumsum()
+feature_importance = feature_importance[feature_importance["acum."] < 0.96]
+best_features = feature_importance["index"].tolist()
+feature_importance
+
+# %%
+
+rf = ensemble.RandomForestClassifier(
+    n_estimators=500,
+    min_samples_leaf=50,
+    random_state=42,
+    n_jobs=4,
+    max_depth=8,
+)
+
+rf.fit(X_train_transform[best_features], y_train)
+
+# %%
+# game phases X_test
+
+X_test_transform = imp_0.transform(X=X_test)
+X_test_transform = imp_1.transform(X=X_test_transform)
+X_test_transform = imp_2.transform(X=X_test_transform)
+X_test_transform = imp_8.transform(X=X_test_transform)
+X_test_transform = imp_none.transform(X=X_test_transform)
+
+X_test_transform = one_hot.transform(X=X_test_transform)
+X_test_transform = tree_discretization.transform(X_test_transform)
+X_test_transform = one_hot_disc.transform(X_test_transform)
+
+# %%
+
+X_test_transform_early = X_test_transform.loc[((X_test_transform["ply_count"] <= 15) &
+                                                (X_test_transform["qtde_queen"] == 1))]
+X_test_transform_early = X_test_transform_early.drop(columns=["ply_count"])
+
+X_test_transform_mid = X_test_transform.loc[((X_test_transform["ply_count"] > 15) & 
+                                              (X_test_transform["ply_count"] <= 60) &
+                                              (X_test_transform["qtde_queen"] == 1))]
+X_test_transform_mid = X_test_transform_mid.drop(columns=["ply_count"])
+
+X_test_transform_end = X_test_transform.loc[((X_test_transform["ply_count"] > 60) |
+                                              (X_test_transform["qtde_queen"] == 0))]
+X_test_transform_end = X_test_transform_end.drop(columns=["ply_count"])
+
+X_test_transform = X_test_transform.drop(columns=["ply_count"])
+
+# game phases y_test
+y_test_early = y_test.iloc[X_test_transform_early.index]
+y_test_mid = y_test.iloc[X_test_transform_mid.index]
+y_test_end = y_test.iloc[X_test_transform_end.index]
+
+# %%
+# game phases X_train
+
+X_train_transform_early = X_train_transform_ply.loc[((X_train_transform_ply["ply_count"] <= 15) &
+                                                (X_train_transform_ply["qtde_queen"] == 1))]
+X_train_transform_early = X_train_transform_early.drop(columns=["ply_count"])
+
+X_train_transform_mid = X_train_transform_ply.loc[((X_train_transform_ply["ply_count"] > 15) & 
+                                              (X_train_transform_ply["ply_count"] <= 60) &
+                                              (X_train_transform_ply["qtde_queen"] == 1))]
+X_train_transform_mid = X_train_transform_mid.drop(columns=["ply_count"])
+
+X_train_transform_end = X_train_transform_ply.loc[((X_train_transform_ply["ply_count"] > 60) |
+                                              (X_train_transform_ply["qtde_queen"] == 0))]
+X_train_transform_end = X_train_transform_end.drop(columns=["ply_count"])
+
+# X_train_transform = X_train_transform.drop(columns=["ply_count"])
+
 # game phases y_train
 y_train_early = y_train.iloc[X_train_transform_early.index]
 y_train_mid = y_train.iloc[X_train_transform_mid.index]
 y_train_end = y_train.iloc[X_train_transform_end.index]
 
-
 # %%
 
-df_explore_early = X_train_transform_early.copy()
-df_explore_early[target] = y_train_early
+y_train_early_proba = rf.predict_proba(X_train_transform_early[best_features])[:,1]
+auc_train_early = metrics.roc_auc_score(y_train_early, y_train_early_proba)
+print(f"AUC Train Early: {auc_train_early}")
 
-df_explore_mid = X_train_transform_mid.copy()
-df_explore_mid[target] = y_train_mid
+y_test_early_proba = rf.predict_proba(X_test_transform_early[best_features])[:,1]
+auc_test_early = metrics.roc_auc_score(y_test_early, y_test_early_proba)
+print(f"AUC test Early: {auc_test_early}")
 
-df_explore_end = X_train_transform_end.copy()
-df_explore_end[target] = y_train_end
 
-# %%
-summary_early = df_explore_early.groupby("fl_upset").agg(["mean", "median"]).T
-summary_early["diff_abs"] = (summary_early[0]) - (summary_early[1])
-summary_early["diff_rel"] = (summary_early[0]) / (summary_early[1])
-summary_early.sort_values("diff_rel", ascending=False)
-# %%
-summary_mid = df_explore_mid.groupby("fl_upset").agg(["mean", "median"]).T
-summary_mid["diff_abs"] = (summary_mid[0]) - (summary_mid[1])
-summary_mid["diff_rel"] = (summary_mid[0]) / (summary_mid[1])
-summary_mid.sort_values("diff_rel", ascending=False)
-# %%
-summary_end = df_explore_end.groupby("fl_upset").agg(["mean", "median"]).T
-summary_end["diff_abs"] = (summary_end[0]) - (summary_end[1])
-summary_end["diff_rel"] = (summary_end[0]) / (summary_end[1])
-summary_end.sort_values("diff_rel", ascending=False)
+y_train_mid_proba = rf.predict_proba(X_train_transform_mid[best_features])[:,1]
+auc_train_mid = metrics.roc_auc_score(y_train_mid, y_train_mid_proba)
+print(f"\nAUC Train mid: {auc_train_mid}")
 
-# %%
+y_test_mid_proba = rf.predict_proba(X_test_transform_mid[best_features])[:,1]
+auc_test_mid = metrics.roc_auc_score(y_test_mid, y_test_mid_proba)
+print(f"AUC test mid: {auc_test_mid}")
 
-dtc = tree.DecisionTreeClassifier(random_state=42)
-dtc.fit(X_train_transform, y_train)
+y_train_end_proba = rf.predict_proba(X_train_transform_end[best_features])[:,1]
+auc_train_end = metrics.roc_auc_score(y_train_end, y_train_end_proba)
+print(f"\nAUC Train end: {auc_train_end}")
 
-# %%
-feature_importance = pd.Series(dtc.feature_importances_, index=X_train_transform.columns).sort_values(ascending=False).reset_index()
-feature_importance["acum."] = feature_importance[0].cumsum()
-feature_importance = feature_importance[feature_importance["acum."] < 0.96]
-feature_importance
-
+y_test_end_proba = rf.predict_proba(X_test_transform_end[best_features])[:,1]
+auc_test_end = metrics.roc_auc_score(y_test_end, y_test_end_proba)
+print(f"AUC test end: {auc_test_end}")
 # %%
